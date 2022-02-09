@@ -1,5 +1,7 @@
 import boto3
 from flask import Flask, render_template, request, jsonify, redirect, url_for
+from flask_cors import CORS
+import os
 from pymongo import MongoClient
 
 from datetime import datetime, timedelta
@@ -11,6 +13,7 @@ import hashlib
 from bson.objectid import ObjectId  # pymongo objectid
 
 app = Flask(__name__)
+cors=CORS(app, resource={r"/*": {"origins": "*"}})
 
 client = MongoClient('localhost', 27017)
 db = client.marumaru
@@ -495,7 +498,10 @@ def profile_upload():
     payload = jwt.decode(token_receive, SECRET_KEY, algorithms=['HS256'])
 
     file = request.files['file_give']
-    s3 = boto3.client('s3')
+    s3 = boto3.client('s3',
+                      aws_access_key_id=os.environ["AWS_ACCESS_KEY_ID"],
+                      aws_secret_access_key=os.environ["AWS_SECRET_ACCESS_KEY"]
+                      )
     s3.put_object(
         ACL = "public-read",
         Bucket="maruflaskproject",
