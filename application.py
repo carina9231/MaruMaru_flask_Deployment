@@ -1,4 +1,7 @@
+import boto3
 from flask import Flask, render_template, request, jsonify, redirect, url_for
+from flask_cors import CORS
+import os
 from pymongo import MongoClient
 
 from datetime import datetime, timedelta
@@ -10,6 +13,7 @@ import hashlib
 from bson.objectid import ObjectId  # pymongo objectid
 
 app = Flask(__name__)
+cors = CORS(app, resource={r"/*": {"origins": "*"}})
 
 client = MongoClient('localhost', 27017)
 db = client.marumaru
@@ -380,7 +384,6 @@ def post_upload():
     title_receive = request.form['title_give']
     address_receive = request.form['address_give']
     contents_receive = request.form['content_give']
-    filename_receive = request.form['filename_give']
 
     file = request.files['file_give']
 
@@ -413,11 +416,40 @@ def post_upload():
         'present_time': mytime,
         'comment': list(),
         'view': 0,
-        'username': username
+        'username': username,
+        'like': list(),
+        'like_count': 0
     }
 
     db.articles.insert_one(doc)
     return jsonify({'msg': '저장 완료!'})
+
+# 게시물 좋아요
+@app.route('/post/like', methods=['POST'])
+def post_like():
+    token_receive = request.cookies.get('mytoken')
+    payload = jwt.decode(token_receive, SECRET_KEY, algorithms=['HS256'])
+    user_info = db.users.find_one({"username": payload["id"]})
+    my_username = user_info['username']
+    post_id_receive = request.form["id_give"]
+    like_list = db.articles.find_one({'number': int(post_id_receive)}, {'_id': False})['like']
+
+    if my_username in like_list:
+        db.articles.update_one({'number': int(post_id_receive)}, {"$pull": {'like': my_username}})
+
+        like_count = len(db.articles.find_one({'number': int(post_id_receive)}, {'_id': False})['like'])
+        db.articles.update_one({'number': int(post_id_receive)}, {'$set': {'like_count': like_count}})
+
+        return jsonify({'result': 'success', 'msg': '좋아요 취소!'})
+
+    else:
+        db.articles.update_one({'number': int(post_id_receive)}, {"$push": {'like': my_username}})
+
+        like_count = len(db.articles.find_one({'number': int(post_id_receive)}, {'_id': False})['like'])
+        db.articles.update_one({'number': int(post_id_receive)}, {'$set': {'like_count': like_count}})
+
+    return jsonify({'result': 'success', 'msg': '좋아요!'})
+
 
 
 # 댓글 작성
@@ -466,19 +498,30 @@ def profile_upload():
     payload = jwt.decode(token_receive, SECRET_KEY, algorithms=['HS256'])
 
     file = request.files['file_give']
+    s3 = boto3.client('s3',
+                      aws_access_key_id=os.environ["AWS_ACCESS_KEY_ID"],
+                      aws_secret_access_key=os.environ["AWS_SECRET_ACCESS_KEY"]
+                      )
+    s3.put_object(
+        ACL = "public-read",
+        Bucket=os.environ["BUCKET_NAME"],
+        Body=file,
+        Key=file.filename,
+        ContentType=file.content_type
+    )
 
-    extension = file.filename.split('.')
-
-    today = datetime.now()
-    mytime = today.strftime('%Y년%m월%d일%H:%M:%S')
-
-    filename = f'{mytime}-{extension[0]}'
-    filename = "".join(i for i in filename if i not in "\/:*?<>|")
-    filename = filename.strip()
-
-    save_to = f'static/profileimg/{filename}.{extension[1]}'
-
-    file.save(save_to)
+    # extension = file.filename.split('.')
+    #
+    # today = datetime.now()
+    # mytime = today.strftime('%Y년%m월%d일%H:%M:%S')
+    #
+    # filename = f'{mytime}-{extension[0]}'
+    # filename = "".join(i for i in filename if i not in "\/:*?<>|")
+    # filename = filename.strip()
+    #
+    # save_to = f'static/profileimg/{filename}.{extension[1]}'
+    #
+    # file.save(save_to)
 
     count = db.profile.count()
     if count == 0:
@@ -492,10 +535,10 @@ def profile_upload():
         'gender': gender_receive,
         'comment': comment_receive,
         'number': max_value,
-        'file': f'{filename}.{extension[1]}',
+        # 'file': f'{filename}.{extension[1]}',
         'username': payload['id'],
         'like': list(),
-        'like_count': 0,
+        'like_count': 0
     }
 
     db.profile.insert_one(doc)
@@ -547,8 +590,7 @@ def profile_like():
     user_info = db.users.find_one({"username": payload["id"]})
     my_username = user_info['username']
     profile_id_receive = request.form["id_give"]
-    past_like = db.profile.find_one({'number': int(profile_id_receive)}, {'_id': False})
-    like_list = past_like['like']
+    like_list = db.profile.find_one({'number': int(profile_id_receive)}, {'_id': False})['like']
 
     if my_username in like_list:
         db.profile.update_one({'number': int(profile_id_receive)}, {"$pull": {'like': my_username}})
@@ -568,9 +610,19 @@ def profile_like():
 # 프로필 카드 삭제 api
 @app.route('/profile', methods=['DELETE'])
 def profile_delete():
+    token_receive = request.cookies.get('mytoken')
+    payload = jwt.decode(token_receive, SECRET_KEY, algorithms=['HS256'])
+    my_username = db.users.find_one({"username": payload["id"]})['username']
+
     id_receive = request.form["id_give"]
-    db.profile.delete_one({'number': int(id_receive)})
-    return jsonify({'result': 'success', 'msg': '프로필삭제'})
+    delete_profile_user = db.profile.find_one({'number': int(id_receive)}, {'_id': False})['username']
+    print(delete_profile_user)
+    if my_username == delete_profile_user:
+        db.profile.delete_one({'number': int(id_receive)})
+        return jsonify({'result': 'success', 'msg': '프로필 삭제 완료'})
+    else:
+        return jsonify({'result': 'success', 'msg': '작성자만 삭제할 수 있습니다.'})
+
 
 
 # 프로필 디테일 수정 화면 GET
