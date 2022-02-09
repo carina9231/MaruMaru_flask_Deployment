@@ -13,7 +13,7 @@ import hashlib
 from bson.objectid import ObjectId  # pymongo objectid
 
 app = Flask(__name__)
-cors=CORS(app, resource={r"/*": {"origins": "*"}})
+cors = CORS(app, resource={r"/*": {"origins": "*"}})
 
 client = MongoClient('localhost', 27017)
 db = client.marumaru

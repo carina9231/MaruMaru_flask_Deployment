@@ -7,6 +7,7 @@ charset-normalizer==2.0.6
 click==8.0.1
 colorama==0.4.4
 cors==1.0.1
+cors-python==0.0.1
 filelock==3.4.2
 Flask==2.0.1
 future==0.18.2
