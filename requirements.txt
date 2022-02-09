@@ -10,6 +10,7 @@ cors==1.0.1
 cors-python==0.0.1
 filelock==3.4.2
 Flask==2.0.1
+Flask-Cors==3.0.10
 future==0.18.2
 gevent==21.12.0
 greenlet==1.1.2

@@ -504,7 +504,7 @@ def profile_upload():
                       )
     s3.put_object(
         ACL = "public-read",
-        Bucket="maruflaskproject",
+        Bucket=os.environ["BUCKET_NAME"],
         Body=file,
         Key=file.filename,
         ContentType=file.content_type
